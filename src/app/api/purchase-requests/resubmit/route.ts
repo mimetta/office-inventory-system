@@ -5,7 +5,6 @@ import { isBranch } from "@/lib/branches";
 import { getCurrentStaff, hasAccess } from "@/lib/staff-auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { getNextCutoff } from "@/lib/pr-cutoff";
-import { notifyPurchaseRequest } from "@/lib/notify";
 
 const bodySchema = z.object({
   branch: z.string(),
@@ -153,20 +152,6 @@ export async function POST(request: Request) {
     }
     console.error("Resubmit insert failed:", insertError.message);
     return NextResponse.json({ error: "Could not save your request. Please try again." }, { status: 500 });
-  }
-
-  // The request is already saved. If the email fails, the staff member still sees success.
-  try {
-    await notifyPurchaseRequest({
-      staffName: member.full_name,
-      department: member.department,
-      branch,
-      cutoffLabel: cutoff.label,
-      resubmission: true,
-      lines: rows.map((r) => ({ name: r.item_name, quantity: r.quantity, note: r.note })),
-    });
-  } catch (err) {
-    console.error("Resubmission email failed:", err);
   }
 
   return NextResponse.json({ ok: true, count: rows.length, cutoff: cutoff.label }, { status: 201 });

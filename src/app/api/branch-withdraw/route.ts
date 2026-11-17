@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createServiceClient } from "@/lib/supabase/service";
 import { getCurrentStaff, hasAccess } from "@/lib/staff-auth";
-import { checkAndNotifyLowStock } from "@/lib/notify";
 
 const reasonEnum = z.enum(["general_use", "client_meeting", "new_hire", "replacement", "project", "other"]);
 
@@ -41,12 +40,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "You don't have access to this branch." }, { status: 403 });
   }
 
+  const service = createServiceClient();
+
   // Per-item limit: counted across the whole request and checked here, not in the browser.
   {
     const wanted = new Map<string, number>();
     for (const row of items) wanted.set(row.item_id, (wanted.get(row.item_id) ?? 0) + row.quantity);
 
-    const { data: limited, error: limitError } = await createServiceClient()
+    const { data: limited, error: limitError } = await service
       .from("items")
       .select("id, name, unit, max_withdraw_qty")
       .in("id", Array.from(wanted.keys()))
@@ -74,7 +75,6 @@ export async function POST(request: Request) {
   }));
 
   // The database fills in the name and department from the roster, never from the browser.
-  const service = createServiceClient();
   const { data, error } = await service.rpc("withdraw_items_for_staff", {
     p_staff_id: member.id,
     p_items: rpcItems,
@@ -88,13 +88,6 @@ export async function POST(request: Request) {
         ? 403
         : 400;
     return NextResponse.json({ error: message }, { status });
-  }
-
-  // The withdrawal already succeeded. An email problem must never turn it into an error.
-  try {
-    await checkAndNotifyLowStock(items.map((row) => ({ item_id: row.item_id, quantity: row.quantity })));
-  } catch (err) {
-    console.error("Low-stock notification failed:", err);
   }
 
   return NextResponse.json({ withdrawals: data }, { status: 201 });

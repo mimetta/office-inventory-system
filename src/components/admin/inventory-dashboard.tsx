@@ -9,6 +9,7 @@ import { InventoryTable } from "@/components/admin/inventory-table";
 import { RestockDialog } from "@/components/admin/restock-dialog";
 import { AddItemDialog } from "@/components/admin/add-item-dialog";
 import { formatDate } from "@/lib/utils";
+import { formatBaht } from "@/lib/money";
 import type { Item } from "@/lib/supabase/database.types";
 import { Boxes, AlertTriangle, ClipboardList } from "lucide-react";
 
@@ -19,6 +20,7 @@ type WithdrawalRow = {
   quantity: number;
   requested_at: string;
   branch?: string | null;
+  total_cost?: number | string | null;
   items: { name: string } | null;
 };
 
@@ -37,6 +39,15 @@ export function InventoryDashboard({
   const [restockTarget, setRestockTarget] = useState<Item | null>(null);
   const [restockOpen, setRestockOpen] = useState(false);
   const [branchFilter, setBranchFilter] = useState("all");
+
+  // Sellers already used on items, offered as suggestions when adding or editing an item.
+  const sellerOptions = useMemo(
+    () =>
+      Array.from(new Set(items.map((i) => (i.seller ?? "").trim()).filter((s) => s.length > 0))).sort((a, b) =>
+        a.localeCompare(b)
+      ),
+    [items]
+  );
 
   const visibleItems = useMemo(
     () => items.filter((i) => branchFilter === "all" || i.branch === branchFilter),
@@ -76,6 +87,7 @@ export function InventoryDashboard({
                   quantity: payload.new.quantity,
                   requested_at: payload.new.requested_at,
                   branch: payload.new.branch ?? null,
+                  total_cost: payload.new.total_cost ?? null,
                   items: item ? { name: item.name } : null,
                 },
                 ...prev,
@@ -131,11 +143,12 @@ export function InventoryDashboard({
               <option value="office">Office</option>
               <option value="factory">Factory</option>
             </select>
-            <AddItemDialog onCreated={addItemIfNew} />
+            <AddItemDialog onCreated={addItemIfNew} sellerOptions={sellerOptions} />
           </div>
         </CardHeader>
         <CardContent>
           <InventoryTable
+            sellerOptions={sellerOptions}
             items={visibleItems}
             onRestock={(item) => {
               setRestockTarget(item);
@@ -158,6 +171,7 @@ export function InventoryDashboard({
                 <TableHead>Branch</TableHead>
                 <TableHead>Item</TableHead>
                 <TableHead>Qty</TableHead>
+                <TableHead className="text-right">Cost</TableHead>
                 <TableHead>Date</TableHead>
               </TableRow>
             </TableHeader>
@@ -169,6 +183,9 @@ export function InventoryDashboard({
                   <TableCell>{branchLabel(w.branch)}</TableCell>
                   <TableCell>{w.items?.name ?? "—"}</TableCell>
                   <TableCell>{w.quantity}</TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {w.total_cost !== null && w.total_cost !== undefined ? formatBaht(Number(w.total_cost)) : "—"}
+                  </TableCell>
                   <TableCell className="text-muted-foreground">{formatDate(w.requested_at)}</TableCell>
                 </TableRow>
               ))}
